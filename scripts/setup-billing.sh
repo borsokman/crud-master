@@ -2,7 +2,7 @@
 
 # Install Python, Pip, and Postgres dependencies
 sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-venv postgresql postgresql-contrib libpq-dev nodejs npm
+sudo apt-get install -y python3 python3-pip python3-venv rabbitmq-server postgresql postgresql-contrib libpq-dev nodejs npm
 
 # Install PM2 globally (to manage Python processes)
 sudo npm install -g pm2
