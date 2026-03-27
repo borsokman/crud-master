@@ -1,22 +1,26 @@
 #!/bin/bash
 
-# Update system
+# Install Python, Pip, and Postgres dependencies
 sudo apt-get update
-sudo apt-get upgrade -y
+sudo apt-get install -y python3 python3-pip python3-venv postgresql postgresql-contrib libpq-dev nodejs npm
 
-# Install Node.js and npm
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs postgresql postgresql-contrib
+# Install PM2 globally (to manage Python processes)
+sudo npm install -g pm2
 
-# Create movies database and user
+# Database setup using variables passed from Vagrant
 sudo -u postgres psql <<EOF
-CREATE DATABASE movies;
-CREATE USER movies_user WITH PASSWORD 'your_password';
-GRANT ALL PRIVILEGES ON DATABASE movies TO movies_user;
-\c movies
-GRANT ALL ON SCHEMA public TO movies_user;
+CREATE DATABASE $DB_NAME;
+CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
+GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
+\c $DB_NAME
+GRANT ALL ON SCHEMA public TO $DB_USER;
 EOF
 
-# Navigate to app directory and install dependencies
+# Setup application
 cd /vagrant/srcs/inventory-app
-npm install
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+
+# Start with PM2 using the python3 interpreter
+pm2 start server.py --name "inventory-api" --interpreter ./venv/bin/python3

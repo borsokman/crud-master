@@ -1,12 +1,17 @@
 #!/bin/bash
 
-# Update system
+# Install Python, Pip, and Postgres dependencies
 sudo apt-get update
-sudo apt-get upgrade -y
+sudo apt-get install -y python3 nodejs npm
 
-# Install Node.js and npm
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+# Install PM2 globally (to manage Python processes)
+sudo npm install -g pm2
 
-cd /vagrant/srcs/api-gateway
-npm install
+# Setup application
+cd /vagrant/srcs/api-gateway-app
+python3 -m venv venv
+source venv/bin/activate
+pip3 install -r requirements.txt
+
+# Start with PM2 using the python3 interpreter
+pm2 start server.py --name "gateway-api" --interpreter ./venv/bin/python3
