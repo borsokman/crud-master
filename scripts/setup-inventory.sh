@@ -8,13 +8,7 @@ sudo apt-get install -y python3 python3-pip python3-venv postgresql postgresql-c
 sudo npm install -g pm2
 
 # Database setup using variables passed from Vagrant
-sudo -u postgres psql <<EOF
-CREATE DATABASE $DB_NAME;
-CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';
-GRANT ALL PRIVILEGES ON DATABASE $DB_NAME TO $DB_USER;
-\c $DB_NAME
-GRANT ALL ON SCHEMA public TO $DB_USER;
-EOF
+sudo -u postgres psql -f /vagrant/scripts/sql/init_inventory.sql
 
 # Setup application
 cd /vagrant/srcs/inventory-app
