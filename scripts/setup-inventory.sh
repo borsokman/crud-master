@@ -17,4 +17,4 @@ source venv/bin/activate
 pip3 install -r requirements.txt
 
 # Start with PM2 using the python3 interpreter
-pm2 start server.py --name "inventory-api" --interpreter ./venv/bin/python3
+pm2 restart inventory-api --update-env || pm2 start server.py --name "inventory-api" --interpreter ./venv/bin/python3
