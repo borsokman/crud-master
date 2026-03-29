@@ -1,6 +1,3 @@
-require 'dotenv'
-Dotenv.load
-
 Vagrant.configure("2") do |config|
   # Base box (Linux image)
   config.vm.box = "net9/ubuntu-24.04-arm64"

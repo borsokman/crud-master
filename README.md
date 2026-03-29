@@ -183,3 +183,9 @@ vagrant ssh billing-vm -c "sudo pm2 start billing-api"
 # Wait a few seconds, then check DB again (row should appear)
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
+
+Before any Vagrant command, export env vars:
+set -a
+source .env
+set +a
+vagrant up
