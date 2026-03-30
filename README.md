@@ -79,8 +79,6 @@ Then in a project folder:
 
 bash
 vagrant init ubuntu/jammy64 # Ubuntu 22.04, works on Apple Silicon under VirtualBox
-vagrant up
-vagrant ssh
 
 Vagrant Basic Commands:
 
@@ -89,10 +87,6 @@ vagrant status # Show VM status
 vagrant ssh <name> # SSH into a VM (e.g., vagrant ssh gateway-vm)
 vagrant halt # Stop all VMs
 vagrant destroy # Delete all VMs
-
-vagrant halt
-vagrant destroy -f
-vagrant up
 
 Flask
 A lightweight Node.js web framework for building REST APIs and web servers. Handles routing, middleware, and HTTP request/response management.
@@ -131,6 +125,15 @@ PM2 status on all VMs
 vagrant ssh gateway-vm -c "sudo pm2 list"
 vagrant ssh inventory-vm -c "sudo pm2 list"
 vagrant ssh billing-vm -c "sudo pm2 list"
+
+vagrant ssh gateway-vm -c "sudo pm2 env 0 | egrep 'INVENTORY*URL|RABBITMQ'"
+vagrant ssh billing-vm -c "sudo pm2 env 0 | egrep 'RABBITMQ|DB*'"
+vagrant ssh inventory-vm -c "sudo pm2 env 0 | egrep 'DB\_'"
+
+Smoke test:
+curl -i http://192.168.56.10:5000/api/movies
+curl -i -X POST http://192.168.56.10:5000/api/movies -H "Content-Type: application/json" -d '{"title":"Test","description":"ok"}'
+curl -i -X POST http://192.168.56.10:5000/api/billing -H "Content-Type: application/json" -d '{"user_id":"1","number_of_items":"2","total_amount":"30"}'
 
 API test set:
 
@@ -183,6 +186,8 @@ vagrant ssh billing-vm -c "sudo pm2 start billing-api"
 # Wait a few seconds, then check DB again (row should appear)
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
+
+Full Start Up
 
 Before any Vagrant command, export env vars:
 set -a
