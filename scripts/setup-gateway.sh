@@ -16,4 +16,5 @@ pip3 install -r requirements.txt
 # Start with PM2 using the python3 interpreter
 pm2 restart gateway-api --update-env || pm2 start server.py --name "gateway-api" --interpreter ./venv/bin/python3
 
+# Persist PM2 process list
 pm2 save

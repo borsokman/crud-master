@@ -194,3 +194,44 @@ set -a
 source .env
 set +a
 vagrant up
+
+```
+crud-master
+├─ .env
+├─ README.md
+├─ Vagrantfile
+├─ config.yaml
+├─ crud-master-diagram.png
+├─ scripts
+│  ├─ dev-down.sh
+│  ├─ dev-up.sh
+│  ├─ setup-billing.sh
+│  ├─ setup-gateway.sh
+│  ├─ setup-inventory.sh
+│  └─ sql
+│     ├─ init_billing.sql
+│     └─ init_inventory.sql
+└─ srcs
+   ├─ api-gateway-app
+   │  ├─ app
+   │  │  ├─ __init__.py
+   │  │  ├─ config.py
+   │  │  └─ routes.py
+   │  ├─ requirements.txt
+   │  └─ server.py
+   ├─ billing-app
+   │  ├─ app
+   │  │  ├─ __init__.py
+   │  │  ├─ consumer.py
+   │  │  └─ models.py
+   │  ├─ requirements.txt
+   │  └─ server.py
+   └─ inventory-app
+      ├─ app
+      │  ├─ __init__.py
+      │  ├─ models.py
+      │  └─ routes.py
+      ├─ requirements.txt
+      └─ server.py
+
+```
