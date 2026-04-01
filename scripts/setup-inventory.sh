@@ -53,5 +53,9 @@ EOF
 pm2 describe inventory-api >/dev/null 2>&1 && pm2 restart inventory-api --update-env \
   || pm2 start server.py --name inventory-api --interpreter ./venv/bin/python3 --update-env
   
-# Persist PM2 process list
+# Inject env then restart to ensure PM2 process gets env vars
+pm2 restart inventory-api --update-env --env production || true
+
+# Persist and enable PM2 on boot for vagrant user
 pm2 save
+pm2 startup systemd -u vagrant --hp /home/vagrant | sed 's/^sudo //g' | bash || true
