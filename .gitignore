@@ -1,4 +1,6 @@
 .vagrant/
+*.log
+*.pid
 **/venv/
 __pycache__/
 *.pyc

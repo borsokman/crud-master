@@ -20,8 +20,10 @@ def add_movie():
     data = request.get_json(silent=True) or {}
     if "title" not in data or not str(data["title"]).strip():
         return jsonify({"error": "title is required"}), 400
+    if "description" not in data or not str(data["description"]).strip():
+        return jsonify({"error": "description is required"}), 400
 
-    movie = Movie(title=data["title"].strip(), description=data.get("description"))
+    movie = Movie(title=str(data["title"]).strip(), description=str(data["description"]).strip(),)
     db.session.add(movie)
     db.session.commit()
     return jsonify({"id": movie.id, "title": movie.title, "description": movie.description}), 201
@@ -54,7 +56,9 @@ def update_movie(movie_id):
             return jsonify({"error": "title cannot be empty"}), 400
         movie.title = data["title"].strip()
     if "description" in data:
-        movie.description = data["description"]
+        if not str(data["description"]).strip():
+            return jsonify({"error": "description cannot be empty"}), 400
+        movie.description = str(data["description"]).strip()
 
     db.session.commit()
     return jsonify({"id": movie.id, "title": movie.title, "description": movie.description}), 200
