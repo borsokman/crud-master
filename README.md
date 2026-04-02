@@ -126,6 +126,10 @@ vagrant ssh gateway-vm -c "sudo pm2 list"
 vagrant ssh inventory-vm -c "sudo pm2 list"
 vagrant ssh billing-vm -c "sudo pm2 list"
 
+vagrant ssh gateway-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
+vagrant ssh inventory-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
+vagrant ssh billing-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
+
 vagrant ssh gateway-vm -c "sudo pm2 env 0 | egrep 'INVENTORY*URL|RABBITMQ'"
 vagrant ssh billing-vm -c "sudo pm2 env 0 | egrep 'RABBITMQ|DB*'"
 vagrant ssh inventory-vm -c "sudo pm2 env 0 | egrep 'DB\_'"
@@ -187,14 +191,6 @@ vagrant ssh billing-vm -c "sudo pm2 start billing-api"
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
 
-Full Start Up
-
-Before any Vagrant command, export env vars:
-set -a
-source .env
-set +a
-vagrant up
-
 ```
 crud-master
 ├─ .env
@@ -235,3 +231,90 @@ crud-master
       └─ server.py
 
 ```
+
+1. Gateway manual-run validation
+   bash
+
+# stop PM2 process so port is free
+
+vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 stop gateway-api"
+
+# run manually (keep this terminal open)
+
+vagrant ssh gateway-vm -c "cd /vagrant/srcs/api-gateway-app && export INVENTORY_API_URL=http://192.168.56.20:8080 && export RABBITMQ_HOST=192.168.56.30 && export RABBITMQ_PORT=5672 && export RABBITMQ_USER=billing_user && export RABBITMQ_PASSWORD=billing_pass && /home/vagrant/.venvs/gateway-app/bin/python server.py"
+
+From your Mac (new terminal):
+bash
+
+curl -i http://192.168.56.10:5000/api/movies
+
+Expect HTTP response (200/whatever valid for your state), not connection refused.
+
+Then restore PM2:
+bash
+
+vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 start gateway-api"
+
+2. Inventory manual-run validation
+   bash
+
+vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 stop inventory-api"
+vagrant ssh inventory-vm -c "cd /vagrant/srcs/inventory-app && export DB_NAME=movies_db && export DB_USER=movies_user && export DB_PASSWORD=123456 && export DB_HOST=localhost && export DB_PORT=5432 && /home/vagrant/.venvs/inventory-app/bin/python server.py"
+
+From Mac:
+bash
+
+curl -i http://192.168.56.20:8080/api/movies
+
+Restore:
+bash
+
+vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 start inventory-api"
+
+3. Billing manual-run validation
+   bash
+
+vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 stop billing-api"
+vagrant ssh billing-vm -c "cd /vagrant/srcs/billing-app && export DB_NAME=billing_db && export DB_USER=orders_user && export DB_PASSWORD=654321 && export DB_HOST=localhost && export DB_PORT=5432 && export RABBITMQ_HOST=192.168.56.30 && export RABBITMQ_PORT=5672 && export RABBITMQ_USER=billing_user && export RABBITMQ_PASSWORD=billing_pass && /home/vagrant/.venvs/billing-app/bin/python server.py"
+
+Then publish via gateway:
+bash
+
+curl -i -X POST http://192.168.56.10:5000/api/billing \
+ -H "Content-Type: application/json" \
+ -d '{"movie_id":1,"number_of_items":1,"total_amount":10.0,"user_id":"u1"}'
+
+Check DB row inserted:
+bash
+
+vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders ORDER BY id DESC LIMIT 3;'"
+
+Restore:
+bash
+
+vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 start billing-api"
+
+    Start all via PM2 again:
+
+bash
+
+vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 restart gateway-api"
+vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 restart inventory-api"
+vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 restart billing-api"
+
+    Check status:
+
+bash
+
+vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 status"
+vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 status"
+vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 status"
+
+    Smoke test:
+
+bash
+
+curl -i http://192.168.56.10:5000/api/movies
+curl -i -X POST http://192.168.56.10:5000/api/billing \
+ -H "Content-Type: application/json" \
+ -d '{"movie_id":1,"number_of_items":1,"total_amount":10.0,"user_id":"u1"}'

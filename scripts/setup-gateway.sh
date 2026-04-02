@@ -1,32 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install Python, Pip, and Postgres dependencies
+INVENTORY_URL="${INVENTORY_URL:-http://192.168.56.20:8080}"
+RABBITMQ_HOST="${RABBITMQ_HOST:-192.168.56.30}"
+RABBITMQ_PORT="${RABBITMQ_PORT:-5672}"
+RABBITMQ_USER="${RABBITMQ_USER:-billing_user}"
+RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-billing_pass}"
+
+APP_DIR="/vagrant/srcs/api-gateway-app"
+VENV_DIR="/home/vagrant/.venvs/gateway-app"
+
 sudo apt-get update
 sudo apt-get install -y python3 python3-pip python3-venv nodejs npm
-
-# Install PM2 globally (to manage Python processes)
 sudo npm install -g pm2
 
-# --- Ensure PostgreSQL is running ---
-sudo systemctl enable postgresql
-sudo systemctl start postgresql
+mkdir -p /home/vagrant/.venvs
+rm -rf "${VENV_DIR}"
+python3 -m venv "${VENV_DIR}"
+"${VENV_DIR}/bin/python" -m ensurepip --upgrade
+"${VENV_DIR}/bin/python" -m pip install --upgrade pip setuptools wheel
+"${VENV_DIR}/bin/python" -m pip install -r "${APP_DIR}/requirements.txt"
 
-# Wait for postgres readiness
-until sudo -u postgres pg_isready >/dev/null 2>&1; do
-  echo "Waiting for PostgreSQL to be ready..."
-  sleep 1
-done
+cat >/tmp/gateway-api.env <<EOF
+INVENTORY_URL=${INVENTORY_URL}
+RABBITMQ_HOST=${RABBITMQ_HOST}
+RABBITMQ_PORT=${RABBITMQ_PORT}
+RABBITMQ_USER=${RABBITMQ_USER}
+RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+EOF
 
-# Setup application
-cd /vagrant/srcs/api-gateway-app
-python3 -m venv venv
-./venv/bin/pip install --upgrade pip
-./venv/bin/pip install -r requirements.txt
+set -a
+source /tmp/gateway-api.env
+set +a
 
-# Start with PM2 using the python3 interpreter
-pm2 restart gateway-api --update-env || pm2 start server.py --name "gateway-api" --interpreter ./venv/bin/python3
+cd "${APP_DIR}"
+pm2 describe gateway-api >/dev/null 2>&1 \
+  && pm2 restart gateway-api --update-env \
+  || pm2 start server.py --name gateway-api --interpreter "${VENV_DIR}/bin/python" --update-env
 
-# Persist PM2 process list
 pm2 save
-pm2 startup systemd -u vagrant --hp /home/vagrant | sed 's/^sudo //g' | bash || true
+sudo env PATH="$PATH" pm2 startup systemd -u vagrant --hp /home/vagrant || true
+sudo systemctl enable pm2-vagrant || true
+sudo systemctl restart pm2-vagrant || true
