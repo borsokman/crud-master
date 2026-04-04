@@ -1,193 +1,100 @@
-Setup (MacOS):
+# 🎬 CRUD-MASTER: Movie Streaming Infrastructure
 
-1. Python 3 + Flask + SQLAlchemy
+A microservices architecture built with Python, Flask, PostgreSQL, and RabbitMQ, deployed across multiple virtual machines using Vagrant.
 
-bash
+# Architecture & Design Choices
 
-# Install Python 3 via Homebrew if not already done
+- **Microservices Pattern**: The system is split into three distinct components to ensure a clear separation of concerns.
+- **API Gateway (192.168.56.10)**: Acts as the single entry point. It proxies HTTP requests to the Inventory API and publishes AMQP messages to the Billing API.
+- **Inventory API (192.168.56.20)**: A synchronous RESTful API using Flask and SQLAlchemy to manage a PostgreSQL database (`movies_db`).
+- **Billing API (192.168.56.30)**: An asynchronous worker using `pika` that strictly consumes messages from RabbitMQ (`billing_queue`) and writes to PostgreSQL (`billing_db`). No HTTP server is exposed.
+- **Process Management**: `pm2` is used across all VMs to daemonize the Python applications and automatically restart them on failure or reboot, ensuring system resilience.
+- **Automated Provisioning**: Bash scripts injected via Vagrant handle all dependency installations, database initializations, and process configurations without manual intervention.
 
-brew install python
+# 🛠 Tech Stack
 
-# Create and activate a virtualenv
+Flask: Lightweight web framework for RESTful services.
 
-python3 -m venv .venv
-source .venv/bin/activate
+SQLAlchemy: ORM for Python-to-PostgreSQL mapping.
 
-# Install Flask + SQLAlchemy + PostgreSQL driver
+PostgreSQL: Relational database for persistent storage.
 
-pip install Flask
-pip install Flask-SQLAlchemy
-pip install psycopg2-binary
-pip install python-dotenv
+RabbitMQ: Message broker for decoupled, asynchronous task handling.
 
-2. PostgreSQL (on Apple Silicon is the same as Intel)
+PM2: Process manager for daemonizing and auto-restarting services.
 
-bash
-brew install postgresql
+Vagrant & VirtualBox: Automated provisioning and environment isolation.
 
-brew services start postgresql
-
-# Create a dev DB and user
-
-createdb myapp
-psql postgres -c "CREATE USER myappuser WITH PASSWORD 'password';"
-psql postgres -c "GRANT ALL PRIVILEGES ON DATABASE myapp TO myappuser;"
-
-3. RabbitMQ
-
-bash
-brew install rabbitmq
-
-brew services start rabbitmq
-
-# Optional: enable web UI (default: http://localhost:15672, user: guest, pw: guest)
-
-brew services stop rabbitmq
-brew services start rabbitmq -- --load-plugins rabbitmq_management
-
-4. Postman (or CLI alternative)
-
-   Postman (GUI):
-
-bash
-brew install --cask postman
-
-# then launch from Finder → Applications → Postman
-
-    CLI alternative (httpie):
-
-bash
-brew install httpie
-
-# or just use built‑in curl
-
-5. VirtualBox (M3/Apple Silicon)
-
-   From Homebrew (if available):
-
-bash
-brew install --cask virtualbox
-
-    If that fails, download the Apple Silicon version from Oracle’s site (VirtualBox 7.x for M1/M2/M3) and install it from the .dmg.
-
-6. Vagrant (on Apple Silicon)
-
-bash
-brew install --cask vagrant
-
-Then in a project folder:
-
-bash
-vagrant init ubuntu/jammy64 # Ubuntu 22.04, works on Apple Silicon under VirtualBox
-
-Vagrant Basic Commands:
+# Build and Run
 
 vagrant up # Create and start all VMs
 vagrant status # Show VM status
 vagrant ssh <name> # SSH into a VM (e.g., vagrant ssh gateway-vm)
 vagrant halt # Stop all VMs
-vagrant destroy # Delete all VMs
+vagrant destroy -f # Delete all VMs
 
-Flask
-A lightweight Node.js web framework for building REST APIs and web servers. Handles routing, middleware, and HTTP request/response management.
+# Verify internal networking from Gateway
 
-SQLAlchemy
-An ORM (Object-Relational Mapping) library for Node.js. Maps database tables to JavaScript objects, allowing you to interact with databases using JavaScript instead of raw SQL.
-
-PostgreSQL
-A relational database management system (RDBMS). Stores structured data in tables with relationships. One of the most reliable and feature-rich open-source databases.
-
-RabbitMQ
-A message broker. Enables asynchronous communication between applications by queuing messages. Services send/receive messages without direct connection—useful for decoupled systems and real-time processing.
-
-Postman
-A GUI tool for testing APIs. Send HTTP requests (GET, POST, PUT, DELETE), inspect responses, and organize API workflows. Simplifies API development and debugging.
-
-VirtualBox
-A virtualization software. Creates virtual machines—isolated computing environments running different operating systems on a single physical machine. Used for testing and development isolation.
-
-How they fit together (typical stack):
-Flask – Build your API server
-SQLAlchemy – Interact with PostgreSQL database
-PostgreSQL – Store your data
-RabbitMQ – Handle asynchronous tasks/messaging
-Postman – Test your API endpoints
-VirtualBox – Run the entire stack in an isolated environment
-
-VM checklist commands:
-
-Ping/Curl test
 vagrant ssh gateway-vm -c "ping -c 2 192.168.56.20"
-vagrant ssh gateway-vm -c "ping -c 2 192.168.56.30"
 vagrant ssh gateway-vm -c "curl -s http://192.168.56.20:8080/api/movies"
 
-PM2 status on all VMs
+# Check process status across nodes
+
 vagrant ssh gateway-vm -c "sudo pm2 list"
 vagrant ssh inventory-vm -c "sudo pm2 list"
 vagrant ssh billing-vm -c "sudo pm2 list"
 
-vagrant ssh gateway-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
-vagrant ssh inventory-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
-vagrant ssh billing-vm -c "ss -ltnp | grep -E ':(8000|8080|5000|3000)' || true"
+# Smoke test
 
-vagrant ssh gateway-vm -c "sudo pm2 env 0 | egrep 'INVENTORY*URL|RABBITMQ'"
-vagrant ssh billing-vm -c "sudo pm2 env 0 | egrep 'RABBITMQ|DB*'"
-vagrant ssh inventory-vm -c "sudo pm2 env 0 | egrep 'DB\_'"
-
-Smoke test:
 curl -i http://192.168.56.10:5000/api/movies
 curl -i -X POST http://192.168.56.10:5000/api/movies -H "Content-Type: application/json" -d '{"title":"Test","description":"ok"}'
 curl -i -X POST http://192.168.56.10:5000/api/billing -H "Content-Type: application/json" -d '{"user_id":"1","number_of_items":"2","total_amount":"30"}'
 
-API test set:
+# Inventory API test:
 
-# 1) Create movie
+1. Create movie
+   curl -s -X POST http://192.168.56.10:5000/api/movies \
+    -H "Content-Type: application/json" \
+    -d '{"title":"Inception","description":"Sci-fi"}'
 
-curl -s -X POST http://192.168.56.10:5000/api/movies \
- -H "Content-Type: application/json" \
- -d '{"title":"Inception","description":"Sci-fi"}'
+2. List movies
+   curl -s http://192.168.56.10:5000/api/movies
 
-# 2) List movies
+3. Get movie id=1
+   curl -s http://192.168.56.10:5000/api/movies/1
 
-curl -s http://192.168.56.10:5000/api/movies
+4. Update movie id=1
+   curl -s -X PUT http://192.168.56.10:5000/api/movies/1 \
+    -H "Content-Type: application/json" \
+    -d '{"title":"Inception Updated","description":"Sci-fi updated"}'
 
-# 3) Get movie id=1
+5. Delete movie id=1
+   curl -s -X DELETE http://192.168.56.10:5000/api/movies/1
 
-curl -s http://192.168.56.10:5000/api/movies/1
+6. Delete all movies
+   curl -s -X DELETE http://192.168.56.10:5000/api/movies
 
-# 4) Update movie id=1
+# Billing API test:
 
-curl -s -X PUT http://192.168.56.10:5000/api/movies/1 \
- -H "Content-Type: application/json" \
- -d '{"title":"Inception Updated","description":"Sci-fi updated"}'
-
-# 5) Delete movie id=1
-
-curl -s -X DELETE http://192.168.56.10:5000/api/movies/1
-
-# 6) Delete all movies
-
-curl -s -X DELETE http://192.168.56.10:5000/api/movies
-
-# Stop billing worker
+1. Stop billing worker
 
 vagrant ssh billing-vm -c "sudo pm2 stop billing-api"
 
-# Queue message through gateway (must still succeed)
+2. Queue message through gateway (must still succeed)
 
 curl -s -X POST http://192.168.56.10:5000/api/billing \
  -H "Content-Type: application/json" \
  -d '{"user_id":"3","number_of_items":"5","total_amount":"180"}'
 
-# Check DB before restart (should NOT include new row yet)
+3. Check DB before restart (should NOT include new row yet)
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
 
-# Start billing worker
+4. Start billing worker
 
 vagrant ssh billing-vm -c "sudo pm2 start billing-api"
 
-# Wait a few seconds, then check DB again (row should appear)
+5. Wait a few seconds, then check DB again (row should appear)
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
 
@@ -231,90 +138,3 @@ crud-master
       └─ server.py
 
 ```
-
-1. Gateway manual-run validation
-   bash
-
-# stop PM2 process so port is free
-
-vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 stop gateway-api"
-
-# run manually (keep this terminal open)
-
-vagrant ssh gateway-vm -c "cd /vagrant/srcs/api-gateway-app && export INVENTORY_API_URL=http://192.168.56.20:8080 && export RABBITMQ_HOST=192.168.56.30 && export RABBITMQ_PORT=5672 && export RABBITMQ_USER=billing_user && export RABBITMQ_PASSWORD=billing_pass && /home/vagrant/.venvs/gateway-app/bin/python server.py"
-
-From your Mac (new terminal):
-bash
-
-curl -i http://192.168.56.10:5000/api/movies
-
-Expect HTTP response (200/whatever valid for your state), not connection refused.
-
-Then restore PM2:
-bash
-
-vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 start gateway-api"
-
-2. Inventory manual-run validation
-   bash
-
-vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 stop inventory-api"
-vagrant ssh inventory-vm -c "cd /vagrant/srcs/inventory-app && export DB_NAME=movies_db && export DB_USER=movies_user && export DB_PASSWORD=123456 && export DB_HOST=localhost && export DB_PORT=5432 && /home/vagrant/.venvs/inventory-app/bin/python server.py"
-
-From Mac:
-bash
-
-curl -i http://192.168.56.20:8080/api/movies
-
-Restore:
-bash
-
-vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 start inventory-api"
-
-3. Billing manual-run validation
-   bash
-
-vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 stop billing-api"
-vagrant ssh billing-vm -c "cd /vagrant/srcs/billing-app && export DB_NAME=billing_db && export DB_USER=orders_user && export DB_PASSWORD=654321 && export DB_HOST=localhost && export DB_PORT=5432 && export RABBITMQ_HOST=192.168.56.30 && export RABBITMQ_PORT=5672 && export RABBITMQ_USER=billing_user && export RABBITMQ_PASSWORD=billing_pass && /home/vagrant/.venvs/billing-app/bin/python server.py"
-
-Then publish via gateway:
-bash
-
-curl -i -X POST http://192.168.56.10:5000/api/billing \
- -H "Content-Type: application/json" \
- -d '{"movie_id":1,"number_of_items":1,"total_amount":10.0,"user_id":"u1"}'
-
-Check DB row inserted:
-bash
-
-vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders ORDER BY id DESC LIMIT 3;'"
-
-Restore:
-bash
-
-vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 start billing-api"
-
-    Start all via PM2 again:
-
-bash
-
-vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 restart gateway-api"
-vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 restart inventory-api"
-vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 restart billing-api"
-
-    Check status:
-
-bash
-
-vagrant ssh gateway-vm -c "sudo -u vagrant -H pm2 status"
-vagrant ssh inventory-vm -c "sudo -u vagrant -H pm2 status"
-vagrant ssh billing-vm -c "sudo -u vagrant -H pm2 status"
-
-    Smoke test:
-
-bash
-
-curl -i http://192.168.56.10:5000/api/movies
-curl -i -X POST http://192.168.56.10:5000/api/billing \
- -H "Content-Type: application/json" \
- -d '{"movie_id":1,"number_of_items":1,"total_amount":10.0,"user_id":"u1"}'

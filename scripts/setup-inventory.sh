@@ -1,68 +1,53 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${DB_NAME:?DB_NAME is required}"
-: "${DB_USER:?DB_USER is required}"
-: "${DB_PASSWORD:?DB_PASSWORD is required}"
-: "${DB_HOST:?DB_HOST is required}"
-: "${DB_PORT:?DB_PORT is required}"
+# 1. Update system and install dependencies
+echo "Installing dependencies..."
+apt-get update
+apt-get install -y python3 python3-pip python3-venv postgresql postgresql-contrib npm
+npm install -g pm2
 
+# 2. Setup PostgreSQL
+echo "Setting up PostgreSQL database and user..."
+# We can pass the variables directly into SQL commands using psql -c
+sudo -u postgres psql -c "CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';" || true
+sudo -u postgres psql -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};" || true
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" || true
+
+# 3. Setup Python Virtual Environment (As the vagrant user)
+echo "Setting up Python environment..."
 APP_DIR="/vagrant/srcs/inventory-app"
 VENV_DIR="/home/vagrant/.venvs/inventory-app"
 
-sudo apt-get update
-sudo apt-get install -y python3 python3-pip python3-venv postgresql postgresql-contrib libpq-dev nodejs npm
-sudo npm install -g pm2
-
-if systemctl list-unit-files | grep -q '^postgresql\.service'; then
-  sudo systemctl enable --now postgresql
-elif systemctl list-unit-files | grep -q '^postgresql@.*\.service'; then
-  PG_UNIT="$(systemctl list-unit-files | awk '/^postgresql@.*\.service/ {print $1; exit}')"
-  sudo systemctl enable --now "${PG_UNIT}"
-else
-  sudo pg_ctlcluster 16 main start || sudo pg_ctlcluster 15 main start || true
-fi
-
-for i in {1..60}; do
-  if sudo -u postgres pg_isready >/dev/null 2>&1; then break; fi
-  echo "Waiting for PostgreSQL to be ready... ($i/60)"
-  sleep 1
-done
-sudo -u postgres pg_isready >/dev/null 2>&1 || { echo "PostgreSQL not ready"; exit 1; }
-
-sudo -u postgres psql \
-  -v db_name="${DB_NAME}" \
-  -v db_user="${DB_USER}" \
-  -v db_password="${DB_PASSWORD}" \
-  -v db_host="${DB_HOST}" \
-  -v db_port="${DB_PORT}" \
-  -f /vagrant/scripts/sql/init_inventory.sql
-
+# Create directories and change ownership to vagrant BEFORE creating the venv
 mkdir -p /home/vagrant/.venvs
-rm -rf "${VENV_DIR}"
-python3 -m venv "${VENV_DIR}"
-"${VENV_DIR}/bin/python" -m ensurepip --upgrade
-"${VENV_DIR}/bin/python" -m pip install --upgrade pip setuptools wheel
-"${VENV_DIR}/bin/python" -m pip install -r "${APP_DIR}/requirements.txt"
+chown -R vagrant:vagrant /home/vagrant/.venvs
 
-cat >/tmp/inventory-api.env <<EOF
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASSWORD=${DB_PASSWORD}
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-EOF
+# Run venv creation and pip install as the vagrant user
+sudo -u vagrant bash -c "
+  python3 -m venv ${VENV_DIR}
+  ${VENV_DIR}/bin/pip install --upgrade pip
+  ${VENV_DIR}/bin/pip install -r ${APP_DIR}/requirements.txt
+"
 
-set -a
-source /tmp/inventory-api.env
-set +a
+# 4. Start the Application with PM2 (As the vagrant user)
+echo "Starting Inventory API with PM2..."
+# We pass the environment variables directly to the PM2 start command
+sudo -u vagrant bash -c "
+  cd ${APP_DIR}
+  
+  # Export variables for this session so PM2 captures them
+  export DB_NAME=${DB_NAME}
+  export DB_USER=${DB_USER}
+  export DB_PASSWORD=${DB_PASSWORD}
+  export DB_HOST=${DB_HOST}
+  export DB_PORT=${DB_PORT}
 
-cd "${APP_DIR}"
-pm2 describe inventory-api >/dev/null 2>&1 \
-  && pm2 restart inventory-api --update-env \
-  || pm2 start server.py --name inventory-api --interpreter "${VENV_DIR}/bin/python" --update-env
+  pm2 delete inventory-api 2>/dev/null || true
+  pm2 start server.py --name inventory-api --interpreter ${VENV_DIR}/bin/python
+  pm2 save
+"
 
-pm2 save
-sudo env PATH="$PATH" pm2 startup systemd -u vagrant --hp /home/vagrant || true
-sudo systemctl enable pm2-vagrant || true
-sudo systemctl restart pm2-vagrant || true
+# 5. Configure PM2 to start on boot
+echo "Setting up PM2 startup script..."
+env PATH=$PATH:/usr/bin /usr/local/bin/pm2 startup systemd -u vagrant --hp /home/vagrant

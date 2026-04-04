@@ -38,7 +38,7 @@ def delete_all_movies():
 
 @movies_bp.route("/api/movies/<int:movie_id>", methods=["GET"])
 def get_movie(movie_id):
-    movie = Movie.query.get(movie_id)
+    movie = db.session.get(Movie, movie_id)
     if not movie:
         return jsonify({"error": "movie not found"}), 404
     return jsonify({"id": movie.id, "title": movie.title, "description": movie.description}), 200
@@ -46,7 +46,7 @@ def get_movie(movie_id):
 
 @movies_bp.route("/api/movies/<int:movie_id>", methods=["PUT"])
 def update_movie(movie_id):
-    movie = Movie.query.get(movie_id)
+    movie = db.session.get(Movie, movie_id)
     if not movie:
         return jsonify({"error": "movie not found"}), 404
 
@@ -66,7 +66,7 @@ def update_movie(movie_id):
 
 @movies_bp.route("/api/movies/<int:movie_id>", methods=["DELETE"])
 def delete_movie(movie_id):
-    movie = Movie.query.get(movie_id)
+    movie = db.session.get(Movie, movie_id)
     if not movie:
         return jsonify({"error": "movie not found"}), 404
 
