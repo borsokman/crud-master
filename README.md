@@ -40,9 +40,13 @@ vagrant ssh gateway-vm -c "curl -s http://192.168.56.20:8080/api/movies"
 
 # Check process status across nodes
 
-vagrant ssh gateway-vm -c "sudo pm2 list"
-vagrant ssh inventory-vm -c "sudo pm2 list"
-vagrant ssh billing-vm -c "sudo pm2 list"
+vagrant ssh gateway-vm -c "pm2 list"
+vagrant ssh inventory-vm -c "pm2 list"
+vagrant ssh billing-vm -c "pm2 list"
+
+vagrant ssh gateway-vm -c "pm2 status"
+vagrant ssh inventory-vm -c "pm2 status"
+vagrant ssh billing-vm -c "pm2 status"
 
 # Smoke test
 
@@ -74,29 +78,27 @@ curl -i -X POST http://192.168.56.10:5000/api/billing -H "Content-Type: applicat
 6. Delete all movies
    curl -s -X DELETE http://192.168.56.10:5000/api/movies
 
-# Billing API test:
+# Billing API test (Integration/Resilience Test)
 
 1. Stop billing worker
 
-vagrant ssh billing-vm -c "sudo pm2 stop billing-api"
+vagrant ssh billing-vm -c "pm2 stop billing-api"
 
-2. Queue message through gateway (must still succeed)
+2. Queue message through gateway (must still succeed, returns 202 Accepted)
 
 curl -s -X POST http://192.168.56.10:5000/api/billing \
  -H "Content-Type: application/json" \
  -d '{"user_id":"3","number_of_items":"5","total_amount":"180"}'
 
-3. Check DB before restart (should NOT include new row yet)
+3. Check DB before restart (should NOT include new row yet):
 
 vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
 
-4. Start billing worker
+4. Start billing worker: vagrant ssh billing-vm -c "pm2 start billing-api"
 
-vagrant ssh billing-vm -c "sudo pm2 start billing-api"
+5. Wait a few seconds, then check DB again. Verify the row has now appeared (proving the message was successfully queued and then processed).
 
-5. Wait a few seconds, then check DB again (row should appear)
-
-vagrant ssh billing-vm -c "sudo -u postgres psql -d billing_db -c 'SELECT \* FROM orders;'"
+# Crud-Master Repo Tree
 
 ```
 crud-master
@@ -106,16 +108,12 @@ crud-master
 ├─ config.yaml
 ├─ crud-master-diagram.png
 ├─ scripts
-│  ├─ dev-down.sh
-│  ├─ dev-up.sh
 │  ├─ setup-billing.sh
 │  ├─ setup-gateway.sh
-│  ├─ setup-inventory.sh
-│  └─ sql
-│     ├─ init_billing.sql
-│     └─ init_inventory.sql
+│  └─ setup-inventory.sh
 └─ srcs
    ├─ api-gateway-app
+   │  ├─ .env
    │  ├─ app
    │  │  ├─ __init__.py
    │  │  ├─ config.py
@@ -123,6 +121,7 @@ crud-master
    │  ├─ requirements.txt
    │  └─ server.py
    ├─ billing-app
+   │  ├─ .env
    │  ├─ app
    │  │  ├─ __init__.py
    │  │  ├─ consumer.py
@@ -130,6 +129,7 @@ crud-master
    │  ├─ requirements.txt
    │  └─ server.py
    └─ inventory-app
+      ├─ .env
       ├─ app
       │  ├─ __init__.py
       │  ├─ models.py
