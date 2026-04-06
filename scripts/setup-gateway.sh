@@ -23,19 +23,20 @@ sudo -u vagrant bash -c "
   ${VENV_DIR}/bin/pip install -r ${APP_DIR}/requirements.txt
 "
 
+echo "Creating .env file for Gateway..."
+cat <<EOF > ${APP_DIR}/.env
+INVENTORY_URL=${INVENTORY_URL}
+RABBITMQ_HOST=${RABBITMQ_HOST}
+RABBITMQ_PORT=${RABBITMQ_PORT}
+RABBITMQ_USER=${RABBITMQ_USER}
+RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+EOF
+chown vagrant:vagrant ${APP_DIR}/.env
+
 # 3. Start the Application with PM2 (As the vagrant user)
 echo "Starting Gateway API with PM2..."
-# We pass the environment variables directly to the PM2 start command
 sudo -u vagrant bash -c "
   cd ${APP_DIR}
-  
-  # Export variables for this session so PM2 captures them
-  export INVENTORY_URL=${INVENTORY_URL}
-  export RABBITMQ_HOST=${RABBITMQ_HOST}
-  export RABBITMQ_PORT=${RABBITMQ_PORT}
-  export RABBITMQ_USER=${RABBITMQ_USER}
-  export RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-
   pm2 delete api-gateway 2>/dev/null || true
   pm2 start server.py --name api-gateway --interpreter ${VENV_DIR}/bin/python
   pm2 save

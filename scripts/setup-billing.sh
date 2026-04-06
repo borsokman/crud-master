@@ -38,23 +38,24 @@ sudo -u vagrant bash -c "
   ${VENV_DIR}/bin/pip install -r ${APP_DIR}/requirements.txt
 "
 
+echo "Creating .env file for Billing..."
+cat <<EOF > ${APP_DIR}/.env
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+RABBITMQ_HOST=${RABBITMQ_HOST}
+RABBITMQ_PORT=${RABBITMQ_PORT}
+RABBITMQ_USER=${RABBITMQ_USER}
+RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+EOF
+chown vagrant:vagrant ${APP_DIR}/.env
+
 # 5. Start the Application with PM2 (As the vagrant user)
 echo "Starting Billing API with PM2..."
-# We pass the environment variables directly to the PM2 start command
 sudo -u vagrant bash -c "
   cd ${APP_DIR}
-  
-  # Export variables for this session so PM2 captures them
-  export DB_NAME=${DB_NAME}
-  export DB_USER=${DB_USER}
-  export DB_PASSWORD=${DB_PASSWORD}
-  export DB_HOST=${DB_HOST}
-  export DB_PORT=${DB_PORT}
-  export RABBITMQ_HOST=${RABBITMQ_HOST}
-  export RABBITMQ_PORT=${RABBITMQ_PORT}
-  export RABBITMQ_USER=${RABBITMQ_USER}
-  export RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-
   pm2 delete billing-api 2>/dev/null || true
   pm2 start server.py --name billing-api --interpreter ${VENV_DIR}/bin/python
   pm2 save
